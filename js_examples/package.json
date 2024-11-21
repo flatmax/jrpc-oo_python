@@ -1,7 +1,7 @@
 {
-  "name": "js-examples",
+  "name": "jrpc-oo_python-examples",
   "version": "1.0.0",
-  "description": "JavaScript examples using jrpc-oo",
+  "description": "JavaScript examples using jrpc-oo_python",
   "main": "index.js",
   "scripts": {
     "test": "jest"

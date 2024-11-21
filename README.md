@@ -1,6 +1,6 @@
-# JRPC2-PY-JS
+# jrpc-oo_python
 
-A flexible JSON-RPC 2.0 implementation enabling seamless communication between Python and JavaScript using an object-oriented approach.
+A Python implementation of the jrpc-oo protocol, enabling seamless communication between Python and JavaScript using an object-oriented approach.
 
 ## Features
 
