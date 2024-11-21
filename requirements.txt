@@ -1,0 +1,2 @@
+jsonrpclib-pelix==0.4.3.2
+pytest==7.4.0
