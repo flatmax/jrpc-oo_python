@@ -56,6 +56,30 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+### Server Example
+
+```python
+from src.jrpc_server import JRPCServer
+
+class Calculator:
+    def add(self, a, b):
+        return a + b
+    
+    def multiply(self, a, b):
+        return a * b
+
+if __name__ == "__main__":
+    # Create and configure server
+    server = JRPCServer(host='localhost', port=8080)
+    
+    # Register calculator instance
+    server.register_instance(Calculator())
+    
+    # Start server
+    asyncio.get_event_loop().run_until_complete(server.start())
+    asyncio.get_event_loop().run_forever()
+```
+
 ### JavaScript Client Example
 
 ```javascript
