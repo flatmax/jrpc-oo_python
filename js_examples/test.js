@@ -9,7 +9,8 @@ class CalculatorClient {
         console.log('\nDEBUG: Testing Calculator.add...');
         const result = await this.call["Calculator.add"](a, b);
         console.log('Full response:', JSON.stringify(result, null, 2));
-        console.log(`${a} + ${b} = ${result.result}`);
+        const value = Object.values(result)[0];  // Get the first (and only) value
+        console.log(`${a} + ${b} = ${value}`);
         return result;
     }
 
@@ -17,7 +18,8 @@ class CalculatorClient {
         console.log('\nDEBUG: Testing Calculator.subtract...');
         const result = await this.call["Calculator.subtract"](a, b);
         console.log('Full response:', JSON.stringify(result, null, 2));
-        console.log(`${a} - ${b} = ${result.result}`);
+        const value = Object.values(result)[0];  // Get the first (and only) value
+        console.log(`${a} - ${b} = ${value}`);
         return result;
     }
 
@@ -25,7 +27,8 @@ class CalculatorClient {
         console.log('\nDEBUG: Testing Calculator.multiply...');
         const result = await this.call["Calculator.multiply"](a, b);
         console.log('Full response:', JSON.stringify(result, null, 2));
-        console.log(`${a} * ${b} = ${result.result}`);
+        const value = Object.values(result)[0];  // Get the first (and only) value
+        console.log(`${a} * ${b} = ${value}`);
         return result;
     }
 

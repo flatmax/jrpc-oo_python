@@ -41,16 +41,25 @@ The server will display all registered classes and methods on startup.
 ### Python Client Example
 
 ```python
-from src.client import RPCClient
+from src.jrpc_client import JRPCClient
+import asyncio
 
 async def main():
     # Create client
-    client = RPCClient('ws://localhost:8080')
-    await client.connect()
+    client = JRPCClient('localhost', 8080)
     
-    # Use Calculator methods
-    result = await client.call_method("Calculator.add", [5, 3])
-    print('5 + 3 =', result)
+    try:
+        # Access Calculator methods using dictionary style
+        calc = client['Calculator']
+        
+        # Use Calculator methods
+        result = await calc.add(5, 3)
+        print('5 + 3 =', result)
+        
+        result = await calc.multiply(6, 7)
+        print('6 * 7 =', result)
+    finally:
+        await client.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -60,6 +69,7 @@ if __name__ == "__main__":
 
 ```python
 from src.jrpc_server import JRPCServer
+import asyncio
 
 class Calculator:
     def add(self, a, b):
@@ -89,24 +99,29 @@ class CalculatorClient {
     get call() { return this.getCall(); }
 
     async add(a, b) {
+        console.log('\nDEBUG: Testing Calculator.add...');
         const result = await this.call["Calculator.add"](a, b);
-        console.log(`${a} + ${b} = ${result.result}`);
+        const value = Object.values(result)[0];  // Get the first (and only) value
+        console.log(`${a} + ${b} = ${value}`);
         return result;
     }
 
     async subtract(a, b) {
+        console.log('\nDEBUG: Testing Calculator.subtract...');
         const result = await this.call["Calculator.subtract"](a, b);
-        console.log(`${a} - ${b} = ${result.result}`);
+        const value = Object.values(result)[0];
+        console.log(`${a} - ${b} = ${value}`);
         return result;
     }
 
     async multiply(a, b) {
+        console.log('\nDEBUG: Testing Calculator.multiply...');
         const result = await this.call["Calculator.multiply"](a, b);
-        console.log(`${a} * ${b} = ${result.result}`);
+        const value = Object.values(result)[0];
+        console.log(`${a} * ${b} = ${value}`);
         return result;
     }
 
-    // Optional: method to run all operations
     async runTests() {
         try {
             await this.add(5, 3);
@@ -129,11 +144,7 @@ async function main() {
         // Wait for connection to establish
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        // Run individual operations
-        await calc.add(5, 3);
-        await calc.subtract(10, 4);
-        
-        // Or run all operations at once
+        // Run all operations
         await calc.runTests();
         
         // Keep the connection alive
@@ -186,11 +197,13 @@ jrpc-oo_python/
 ├── requirements.txt
 ├── src/
 │   ├── __init__.py
-│   ├── server.py
-│   └── client.py
+│   ├── server.py        # Example server with Calculator class
+│   ├── jrpc_server.py   # Core RPC server implementation
+│   ├── client.py        # Example client usage
+│   └── jrpc_client.py   # Core RPC client implementation
 └── js_examples/
     ├── package.json
-    └── test.js
+    └── test.js          # JavaScript client example
 ```
 
 ### Running Tests
@@ -199,21 +212,17 @@ jrpc-oo_python/
 # Start the server
 python src/server.py
 
-# In another terminal, run JavaScript example
+# In another terminal, run the Python client
+python src/client.py
+
+# Or run the JavaScript client
 cd js_examples
 node test.js
 ```
 
-## Security Considerations
-
-- The server currently accepts all connections
-- No built-in authentication mechanism
-- Consider running behind a reverse proxy for production use
-- Implement your own authentication layer if needed
-
 ## Contributing
 
-1. Fork the repository
+1. Fork it
 2. Create your feature branch
 3. Commit your changes
 4. Push to the branch
