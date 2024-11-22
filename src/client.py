@@ -19,10 +19,7 @@ class RPCProxy:
         if method_name.startswith('_'):
             raise AttributeError(f"Cannot access private method {method_name}")
         
-        # Construct the full method path (ClassName.method)
         method_path = f"{self._class_name}.{method_name}"
-        
-        # Return a lambda that will make the actual RPC call
         return lambda *args: self._client.call_method(method_path, args)
 
 
@@ -37,11 +34,7 @@ class RPCClient:
         """Connect to the WebSocket server"""
         if not self.websocket:
             self.websocket = await websockets.connect(self.uri, subprotocols=['jsonrpc'])
-            print(f"Connected to {self.uri}")
-            
-            # Get available methods
-            components = await self.call_method("system.listComponents")
-            print("Available methods:", components)
+            await self.call_method("system.listComponents")
     
     async def close(self):
         """Close the WebSocket connection"""
@@ -54,10 +47,7 @@ class RPCClient:
         if not self.websocket:
             await self.connect()
             
-        # Increment request ID
         self.request_id += 1
-        
-        # Prepare JSON-RPC request
         request = {
             'jsonrpc': '2.0',
             'method': method,
@@ -65,13 +55,9 @@ class RPCClient:
             'id': self.request_id
         }
         
-        # Send request and wait for response
-        print(f"Sending request: {json.dumps(request, indent=2)}")
         await self.websocket.send(json.dumps(request))
         response = await self.websocket.recv()
-        print(f"Received response: {response}")
         
-        # Parse and return result
         parsed = json.loads(response)
         if 'error' in parsed:
             raise Exception(f"RPC Error: {parsed['error']}")
@@ -83,13 +69,10 @@ class RPCClient:
 
 
 async def main():
-    # Example usage
     client = RPCClient()
     try:
-        # Get a proxy for the Calculator class
         calc = client.get_proxy("Calculator")
         
-        # Make RPC calls using natural object-oriented syntax
         a, b = 5, 3
         result = await calc.add(a, b)
         print(f"add({a}, {b}) = {{'1': {result}}}")

@@ -5,12 +5,13 @@ A Python implementation of the jrpc-oo protocol, enabling seamless communication
 ## Features
 
 - JSON-RPC 2.0 compliant
+- WebSocket-based communication
 - Class-based RPC approach
-- Supports both HTTP and WebSocket protocols
-- Method introspection support
-- Dynamic proxy-based method calling
+- Dynamic method discovery
 - Cross-language compatibility focus
 - Automatic method discovery via `system.listComponents`
+- Debug logging support
+- Comprehensive error handling
 
 ## Installation
 
@@ -31,27 +32,28 @@ npm install
 
 ### Starting the Server
 
-The server supports both HTTP and WebSocket protocols:
-
 ```bash
-# HTTP Server (default)
 python src/server.py
-
-# WebSocket Server
-python src/server.py ws
 ```
+
+The server will display all registered classes and methods on startup.
 
 ### Python Client Example
 
 ```python
 from src.client import RPCClient
 
-# Create client
-client = RPCClient('http://localhost:8080')  # or 'ws://localhost:8080' for WebSocket
+async def main():
+    # Create client
+    client = RPCClient('ws://localhost:8080')
+    await client.connect()
+    
+    # Use Calculator methods
+    result = await client.call_method("Calculator.add", [5, 3])
+    print('5 + 3 =', result)
 
-# Use Calculator methods
-result = client.Calculator.add(5, 3)
-print('5 + 3 =', result)
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 ### JavaScript Client Example
@@ -59,28 +61,86 @@ print('5 + 3 =', result)
 ```javascript
 const JRPCNodeClient = require('jrpc-oo/JRPCNodeClient').JRPCNodeClient;
 
-async function main() {
-    // Create client
-    const client = new JRPCNodeClient('ws://localhost:8080');
-    
-    // Use Calculator methods
-    const result = await client.call['Calculator.add'](5, 3);
-    console.log('5 + 3 =', result);
+class CalculatorClient {
+    get call() { return this.getCall(); }
+
+    async add(a, b) {
+        const result = await this.call["Calculator.add"](a, b);
+        console.log(`${a} + ${b} = ${result.result}`);
+        return result;
+    }
+
+    async subtract(a, b) {
+        const result = await this.call["Calculator.subtract"](a, b);
+        console.log(`${a} - ${b} = ${result.result}`);
+        return result;
+    }
+
+    async multiply(a, b) {
+        const result = await this.call["Calculator.multiply"](a, b);
+        console.log(`${a} * ${b} = ${result.result}`);
+        return result;
+    }
+
+    // Optional: method to run all operations
+    async runTests() {
+        try {
+            await this.add(5, 3);
+            await this.subtract(10, 4);
+            await this.multiply(6, 7);
+        } catch (error) {
+            console.error('Error:', error.message);
+            throw error;
+        }
+    }
 }
+
+async function main() {
+    try {
+        // Create and setup RPC client
+        const jrpc = new JRPCNodeClient('ws://localhost:8080');
+        const calc = new CalculatorClient();
+        jrpc.addClass(calc);
+        
+        // Wait for connection to establish
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Run individual operations
+        await calc.add(5, 3);
+        await calc.subtract(10, 4);
+        
+        // Or run all operations at once
+        await calc.runTests();
+        
+        // Keep the connection alive
+        console.log('Running... Press Ctrl-C to exit');
+        await new Promise(() => {});
+        
+    } catch (error) {
+        console.error('Error:', error.message);
+        process.exit(1);
+    }
+}
+
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+    console.log('Received SIGINT. Exiting...');
+    process.exit(0);
+});
+
+main().catch(error => {
+    console.error('Unhandled error:', error);
+    process.exit(1);
+});
 ```
 
 ## Protocol Support
-
-### HTTP (Default)
-- URL format: `http://hostname:port`
-- Uses `jsonrpclib-pelix` for Python server
-- Standard HTTP JSON-RPC 2.0 protocol
 
 ### WebSocket
 - URL format: `ws://hostname:port`
 - Uses `websockets` library for Python server
 - Full-duplex communication
-- Better for real-time applications
+- Ideal for real-time applications
 
 ## Available Components
 
@@ -97,28 +157,25 @@ A simple calculator class demonstrating RPC functionality:
 
 ### Project Structure
 ```
-jrpc2-py-js/
+jrpc-oo_python/
 ├── README.md
 ├── requirements.txt
 ├── src/
 │   ├── __init__.py
 │   ├── server.py
 │   └── client.py
-├── js_examples/
-│   ├── package.json
-│   └── test.js
-└── tests/
-    ├── __init__.py
-    └── test_rpc.py
+└── js_examples/
+    ├── package.json
+    └── test.js
 ```
 
 ### Running Tests
 
 ```bash
-# Python tests
-pytest tests/
+# Start the server
+python src/server.py
 
-# JavaScript example
+# In another terminal, run JavaScript example
 cd js_examples
 node test.js
 ```
