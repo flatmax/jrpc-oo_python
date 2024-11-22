@@ -8,21 +8,6 @@ import websockets
 from typing import Any
 
 
-class RPCProxy:
-    """Proxy class to handle method calls for a specific class"""
-    def __init__(self, client, class_name: str):
-        self._client = client
-        self._class_name = class_name
-
-    def __getattr__(self, method_name: str) -> Any:
-        """Handle method calls by constructing the full method path"""
-        if method_name.startswith('_'):
-            raise AttributeError(f"Cannot access private method {method_name}")
-        
-        method_path = f"{self._class_name}.{method_name}"
-        return lambda *args: self._client.call_method(method_path, args)
-
-
 class RPCClient:
     def __init__(self, host="localhost", port=8080):
         """Initialize RPC client with host and port"""
@@ -62,16 +47,19 @@ class RPCClient:
         if 'error' in parsed:
             raise Exception(f"RPC Error: {parsed['error']}")
         return parsed['result']
-    
-    def get_proxy(self, class_name: str) -> RPCProxy:
-        """Get a proxy for a specific class"""
-        return RPCProxy(self, class_name)
+
+    def __getitem__(self, class_name: str):
+        """Allow dictionary-style access for RPC classes e.g. client['Calculator']"""
+        return type('RPCClass', (), {
+            '__getattr__': lambda _, method: lambda *args: self.call_method(f"{class_name}.{method}", args)
+        })()
 
 
 async def main():
     client = RPCClient()
     try:
-        calc = client.get_proxy("Calculator")
+        # Access Calculator methods using dictionary style
+        calc = client['Calculator']
         
         a, b = 5, 3
         result = await calc.add(a, b)
