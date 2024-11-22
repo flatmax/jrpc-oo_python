@@ -1,71 +1,41 @@
 #!/usr/bin/env python3
 """
-JSON-RPC 2.0 Server implementation with class-based RPC support
+JSON-RPC 2.0 Server implementation with WebSocket support
 """
 from jsonrpclib.SimpleJSONRPCServer import SimpleJSONRPCServer
 import inspect
 import json
 import asyncio
 import websockets
-import threading
 from urllib.parse import urlparse
+import traceback
 
 
 class RPCServer:
-    def __init__(self, uri="http://localhost:8080"):
-        """Initialize RPC server with URI
-        URI can be either http://host:port or ws://host:port
-        """
-        self.uri = uri
-        parsed = urlparse(uri)
-        self.host = parsed.hostname or 'localhost'
-        self.port = parsed.port or 8080
-        self.protocol = parsed.scheme or 'http'
-        
+    def __init__(self, host='localhost', port=8080):
+        """Initialize WebSocket RPC server"""
+        self.host = host
+        self.port = port
         self.instances = {}
-        self.ws_server = None
-        self.http_server = None
-        
-        # Register system methods
-        self._register_system_methods()
-
-    def _register_system_methods(self):
-        """Register system methods including listComponents"""
         self._system_methods = {
             'system.listComponents': self.list_components
         }
+        print("RPC Server initialized")
 
     def list_components(self):
         """List all registered components and their methods
         This is called by jrpc-oo's setupRemote to discover available instances and methods
-        Returns a dictionary of class names and their methods
+        Returns a dictionary of method names in the format {class_name.method_name: True}
         """
+        print('list components')
         components = {}
         for class_name, instance in self.instances.items():
-            methods = []
             for name, method in inspect.getmembers(instance, inspect.ismethod):
                 if not name.startswith('_'):  # Only include public methods
-                    # Get method signature
-                    sig = inspect.signature(method)
-                    param_info = []
-                    for param in sig.parameters.values():
-                        if param.name != 'self':  # Skip self parameter
-                            param_info.append({
-                                'name': param.name,
-                                'type': str(param.annotation) if param.annotation != inspect.Parameter.empty else 'any'
-                            })
-                    
-                    methods.append({
-                        'name': name,
-                        'params': param_info,
-                        'return': str(sig.return_annotation) if sig.return_annotation != inspect.Parameter.empty else 'any'
-                    })
-            
-            components[class_name] = {
-                'methods': methods,
-                'doc': instance.__doc__ or ''
-            }
+                    method_name = f"{class_name}.{name}"
+                    components[method_name] = True
         
+        print(components)
         return components
 
     def register_instance(self, instance, class_name=None):
@@ -75,75 +45,92 @@ class RPCServer:
         
         self.instances[class_name] = instance
 
-    async def _handle_ws_message(self, websocket):
-        """Handle WebSocket messages"""
-        async for message in websocket:
-            try:
-                request = json.loads(message)
-                method_path = request.get('method', '')
-                params = request.get('params', [])
-                request_id = request.get('id')
+    async def _handle_ws_message(self, websocket, message):
+        """Handle incoming WebSocket message"""
+        print(f"\nReceived WebSocket message: {message}")
+        try:
+            # Parse message as JSON-RPC
+            parsed = json.loads(message)
+            print(f"Parsed JSON-RPC message: {parsed}")
 
-                # Handle system methods
-                if method_path in self._system_methods:
-                    result = self._system_methods[method_path]()
-                else:
-                    # Handle instance methods
-                    class_name, method_name = method_path.split('.')
-                    instance = self.instances.get(class_name)
-                    if not instance:
-                        raise Exception(f"Class {class_name} not found")
-                    
-                    method = getattr(instance, method_name, None)
-                    if not method or method_name.startswith('_'):
-                        raise Exception(f"Method {method_path} not found")
-                    
-                    result = method(*params)
+            # Get method name and parameters
+            method_name = parsed.get('method')
+            params = parsed.get('params', {})
+            
+            # Extract args from params if present
+            if isinstance(params, dict) and 'args' in params:
+                args = params['args']
+            else:
+                args = params if isinstance(params, list) else [params]
+                
+            print(f"Method: {method_name}, Args: {args}")
 
-                response = {
+            # Handle system methods first
+            if method_name in self._system_methods:
+                print(f"Calling system method: {method_name}")
+                result = self._system_methods[method_name]()
+                print(f"System method result: {result}")
+                response = json.dumps({
                     'jsonrpc': '2.0',
                     'result': result,
-                    'id': request_id
-                }
-            except Exception as e:
-                response = {
+                    'id': parsed.get('id')
+                })
+            # Handle instance methods
+            elif '.' in method_name:
+                class_name, method = method_name.split('.')
+                instance = self.instances.get(class_name)
+                if instance and hasattr(instance, method):
+                    print(f"Found method {method} in class {class_name}")
+                    method_obj = getattr(instance, method)
+                    result = await asyncio.get_event_loop().run_in_executor(None, method_obj, *args)
+                    print(f"Method result: {result}")
+                    response = json.dumps({
+                        'jsonrpc': '2.0',
+                        'result': result,
+                        'id': parsed.get('id')
+                    })
+                else:
+                    print(f"Method {method_name} not found")
+                    response = json.dumps({
+                        'jsonrpc': '2.0',
+                        'error': {'code': -32601, 'message': f'Method {method_name} not found'},
+                        'id': parsed.get('id')
+                    })
+            else:
+                print(f"Invalid method name format: {method_name}")
+                response = json.dumps({
                     'jsonrpc': '2.0',
-                    'error': {
-                        'code': -32000,
-                        'message': str(e)
-                    },
-                    'id': request_id
-                }
+                    'error': {'code': -32601, 'message': f'Invalid method name format: {method_name}'},
+                    'id': parsed.get('id')
+                })
 
-            await websocket.send(json.dumps(response))
+            print(f"Sending response: {response}")
+            await websocket.send(response)
 
-    async def _start_ws_server(self):
-        """Start WebSocket server"""
-        async with websockets.serve(self._handle_ws_message, self.host, self.port):
-            print(f"WebSocket server running on ws://{self.host}:{self.port}")
-            await asyncio.Future()  # run forever
+        except Exception as e:
+            print(f"Error handling message: {str(e)}")
+            print(f"Error traceback: {traceback.format_exc()}")
+            error_response = json.dumps({
+                'jsonrpc': '2.0',
+                'error': {'code': -32603, 'message': str(e)},
+                'id': parsed.get('id') if 'parsed' in locals() else None
+            })
+            print(f"Sending error response: {error_response}")
+            await websocket.send(error_response)
 
-    def _start_http_server(self):
-        """Start HTTP server"""
-        self.http_server = SimpleJSONRPCServer((self.host, self.port))
-        self.http_server.allow_reuse_address = True
+    async def _handle_ws_connection(self, websocket):
+        """Handle WebSocket connection"""
+        try:
+            async for message in websocket:
+                await self._handle_ws_message(websocket, message)
+        except websockets.exceptions.ConnectionClosed:
+            print("Client disconnected")
+        except Exception as e:
+            print(f"Error in WebSocket handler: {str(e)}")
 
-        # Register all instance methods
-        for class_name, instance in self.instances.items():
-            for name, method in inspect.getmembers(instance, inspect.ismethod):
-                if not name.startswith('_'):
-                    method_path = f"{class_name}.{name}"
-                    self.http_server.register_function(method, method_path)
-
-        # Register system methods
-        for method_path, method in self._system_methods.items():
-            self.http_server.register_function(method, method_path)
-
-        print(f"HTTP server running on http://{self.host}:{self.port}")
-        self.http_server.serve_forever()
-
-    def serve_forever(self):
-        """Start the server based on protocol"""
+    async def serve(self):
+        """Start the WebSocket server"""
+        # Print registered methods
         print(f"\nRegistered classes and methods:")
         for class_name, instance in self.instances.items():
             print(f"\n{class_name}:")
@@ -151,46 +138,58 @@ class RPCServer:
                 if not name.startswith('_'):
                     print(f"  - {name}")
 
-        if self.protocol == 'ws':
-            asyncio.run(self._start_ws_server())
-        else:
-            self._start_http_server()
+        # Create and start WebSocket server
+        self.ws_server = await websockets.serve(
+            self._handle_ws_connection,
+            self.host,
+            self.port,
+            subprotocols=['jsonrpc']  # Specify JSON-RPC subprotocol
+        )
+        print(f"WebSocket server running on ws://{self.host}:{self.port}")
+        await self.ws_server.wait_closed()
 
     def shutdown(self):
         """Shutdown the server"""
-        if self.http_server:
-            self.http_server.shutdown()
-            self.http_server.server_close()
+        if self.ws_server:
+            self.ws_server.close()
 
 
 # Example class for testing
 class Calculator:
     """A simple calculator class for testing RPC"""
     
-    def add(self, a: float, b: float) -> float:
+    def add(self, a, b):
         """Add two numbers"""
-        return a + b
+        print(f'Calculator.add called with: a={a}, b={b}')
+        result = a + b
+        print(f'Calculator.add result: {result}')
+        return result
 
-    def subtract(self, a: float, b: float) -> float:
+    def subtract(self, a, b):
         """Subtract b from a"""
-        return a - b
+        print(f'Calculator.subtract called with: a={a}, b={b}')
+        result = a - b
+        print(f'Calculator.subtract result: {result}')
+        return result
 
-    def multiply(self, a: float, b: float) -> float:
+    def multiply(self, a, b):
         """Multiply two numbers"""
-        return a * b
+        print(f'Calculator.multiply called with: a={a}, b={b}')
+        result = a * b
+        print(f'Calculator.multiply result: {result}')
+        return result
 
 
-if __name__ == "__main__":
-    import sys
+if __name__ == "__main__":    
+    # Create server
+    server = RPCServer()
     
-    # Default to HTTP if no protocol specified
-    uri = "ws://localhost:8080" if len(sys.argv) > 1 and sys.argv[1] == "ws" else "http://localhost:8080"
-    
-    server = RPCServer(uri)
+    # Register calculator instance
     calc = Calculator()
     server.register_instance(calc)
     
     try:
-        server.serve_forever()
+        asyncio.run(server.serve())
     except KeyboardInterrupt:
+        print("\nShutting down...")
         server.shutdown()
